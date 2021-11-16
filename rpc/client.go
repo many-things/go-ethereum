@@ -338,6 +338,39 @@ func (c *Client) CallContext(ctx context.Context, result interface{}, method str
 	}
 }
 
+func (c *Client) CallRaw(result interface{}, method string, params json.RawMessage) error {
+	ctx := context.Background()
+	if result != nil && reflect.TypeOf(result).Kind() != reflect.Ptr {
+		return fmt.Errorf("call result parameter must be pointer or nil interface: %v", result)
+	}
+	msg := &jsonrpcMessage{Version: vsn, ID: c.nextID(), Method: method}
+	if json.Valid(params) {
+		msg.Params = params
+	}
+	op := &requestOp{ids: []json.RawMessage{msg.ID}, resp: make(chan *jsonrpcMessage, 1)}
+	var err error
+	if c.isHTTP() {
+		err = c.sendHTTP(ctx, op, msg)
+	} else {
+		err = c.send(ctx, op, msg)
+	}
+	if err != nil {
+		return err
+	}
+
+	// dispatch has accepted the request and will close the channel when it quits.
+	switch resp, err := op.wait(ctx, c); {
+	case err != nil:
+		return err
+	case resp.Error != nil:
+		return resp.Error
+	case len(resp.Result) == 0:
+		return ErrNoResult
+	default:
+		return json.Unmarshal(resp.Result, &result)
+	}
+}
+
 // BatchCall sends all given requests as a single batch and waits for the server
 // to return a response for all of them.
 //
