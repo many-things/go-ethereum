@@ -1044,3 +1044,14 @@ func newFrontierInstructionSet() JumpTable {
 
 	return validate(tbl)
 }
+
+func copyJumpTable(table *JumpTable) *JumpTable {
+	res := *table
+	for i, ptr := range table {
+		if ptr != nil {
+			op := *ptr
+			res[i] = &op
+		}
+	}
+	return &res
+}
